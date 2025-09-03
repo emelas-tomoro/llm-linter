@@ -1,6 +1,5 @@
 include README.md
 include LICENSE
-include env.example
 include install.sh
 recursive-include linter/prompts *.md
 global-exclude *.pyc

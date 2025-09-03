@@ -66,41 +66,6 @@ pip install git+https://github.com/emelas-tomoro/llm-linter.git@v0.1.0
 pip install git+https://github.com/emelas-tomoro/llm-linter.git@main
 ```
 
-### Install with Pipx (Isolated Environment)
-
-For completely isolated installation that doesn't affect your system Python:
-
-```bash
-pipx install git+https://github.com/emelas-tomoro/llm-linter.git
-```
-
-### Development Installation
-
-For development or local modifications:
-
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/emelas-tomoro/llm-linter.git
-   cd llm-linter
-   ```
-
-2. Install in editable mode:
-   ```bash
-   pip install -e .
-   ```
-
-### API Key Setup
-
-Set your OpenAI API key:
-```bash
-export OPENAI_API_KEY="your-api-key-here"
-```
-
-Or create a `.env` file in your project root:
-```
-OPENAI_API_KEY=your-api-key-here
-```
-
 ### Model Configuration
 
 You can customize which OpenAI models to use via environment variables:
@@ -120,20 +85,25 @@ LLM_LINTER_TRIAGE_MODEL=gpt-5-2025-08-07
 LLM_LINTER_RECOMMENDATIONS_MODEL=gpt-5-mini-2025-08-07
 ```
 
-> 💡 **Tip**: Copy the `env.example` file from the repository to `.env` and customize it with your settings.
-
 **Available Models:**
 - `gpt-5-2025-08-07` - Latest GPT-5 model (default for triage)
 - `gpt-5-mini-2025-08-07` - GPT-5 mini version (default for specialists)
 - `gpt-4o` - GPT-4 Omni, very capable
-- `gpt-4o-mini` - GPT-4 Omni mini, fast and cost-effective
-- `gpt-4-turbo` - Previous generation, still capable
-- `gpt-3.5-turbo` - Fastest and cheapest option
 
 **Model Roles:**
 - **Specialist Model**: Used by all analysis agents (complexity, security, etc.)
 - **Triage Model**: Used by the coordinating agent in triage mode
 - **Recommendations Model**: Used for generating actionable code suggestions
+
+### Package Structure
+
+This package is configured to be pip-installable through several key files:
+- **`pyproject.toml`** - Defines package metadata, dependencies, and creates the `llm-linter` command-line tool
+- **`MANIFEST.in`** - Controls which files are included in the package distribution
+- **`linter/__init__.py`** - Makes the `linter` directory a proper Python package
+- **`linter/core.py`** - Contains the main CLI interface that gets exposed as the `llm-linter` command
+
+The `[project.scripts]` section in `pyproject.toml` creates the `llm-linter` command that maps to `linter.core:main`, allowing users to run the tool from anywhere after installation.
 
 ### Model Configuration Priority
 
@@ -141,7 +111,7 @@ Models are selected in the following priority order (highest to lowest):
 
 1. **Command Line Arguments**: `--specialist-model`, `--triage-model`, `--recommendations-model`
 2. **Environment Variables**: `LLM_LINTER_SPECIALIST_MODEL`, `LLM_LINTER_TRIAGE_MODEL`, `LLM_LINTER_RECOMMENDATIONS_MODEL`
-3. **Default Values**: `gpt-5-mini-2025-08-07` (specialists), `gpt-5-2025-08-07` (triage)
+3. **Default Values**: `gpt-5-mini-2025-08-07` (specialists), `gpt-5-2025-08-07` (triage), 'o4-mini-2025-04-16' (recommendation)
 
 This allows for flexible configuration:
 - Set defaults in `.env` files
@@ -195,32 +165,6 @@ llm-linter . --format human
 
 # Update when new features are available
 pip install --upgrade git+https://github.com/emelas-tomoro/llm-linter.git
-```
-
-### Model Configuration Examples
-
-**Cost-Optimized Setup** (fastest, cheapest):
-```bash
-export LLM_LINTER_SPECIALIST_MODEL="gpt-3.5-turbo"
-export LLM_LINTER_TRIAGE_MODEL="gpt-4o-mini"
-export LLM_LINTER_RECOMMENDATIONS_MODEL="gpt-3.5-turbo"
-llm-linter /path/to/project
-```
-
-**High-Quality Setup** (best results, higher cost):
-```bash
-export LLM_LINTER_SPECIALIST_MODEL="gpt-4o"
-export LLM_LINTER_TRIAGE_MODEL="gpt-4o"
-export LLM_LINTER_RECOMMENDATIONS_MODEL="gpt-4o"
-llm-linter /path/to/project
-```
-
-**Default Setup** (uses GPT-5 models):
-```bash
-export LLM_LINTER_SPECIALIST_MODEL="gpt-5-mini-2025-08-07"
-export LLM_LINTER_TRIAGE_MODEL="gpt-5-2025-08-07"
-export LLM_LINTER_RECOMMENDATIONS_MODEL="gpt-5-mini-2025-08-07"
-llm-linter /path/to/project
 ```
 
 ## Usage
