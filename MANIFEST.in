@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include env.example
+include install.sh
+recursive-include linter/prompts *.md
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store

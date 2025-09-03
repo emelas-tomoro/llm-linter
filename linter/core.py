@@ -52,6 +52,15 @@ def _agent_instructions_with_prompt(default_header: str, prompt_name: str):
     return _fn
 
 
+def _get_model_config(cli_specialist: Optional[str] = None, cli_triage: Optional[str] = None, cli_recommendations: Optional[str] = None) -> Dict[str, str]:
+    """Get model configuration from CLI args, environment variables, or defaults (in that order)."""
+    return {
+        "specialist_model": cli_specialist or os.getenv("LLM_LINTER_SPECIALIST_MODEL", "gpt-5-mini-2025-08-07"),
+        "triage_model": cli_triage or os.getenv("LLM_LINTER_TRIAGE_MODEL", "gpt-5-2025-08-07"),
+        "recommendations_model": cli_recommendations or os.getenv("LLM_LINTER_RECOMMENDATIONS_MODEL", "gpt-5-mini-2025-08-07"),
+    }
+
+
 def _extract_final_output(result: Any) -> str:
     """Best-effort extraction of final text from Runner result across API variants."""
     if isinstance(result, str):
@@ -75,70 +84,73 @@ def _extract_final_output(result: Any) -> str:
     return str(result)
 
 
-# Specialized agents with per-agent prompts
-duplication_agent = Agent[LinterContext](
-    name="Duplication Lint Agent",
-    model="gpt-5-mini-2025-08-07",
-    handoff_description="Detects duplicated code blocks across the repository.",
-    instructions=_agent_instructions_with_prompt("Use your tools to analyze duplication and return compact JSON.", "duplication"),
-    tools=[check_code_duplication, scan_repo_index, load_rules_text],
-)
+def _create_agents(models: Dict[str, str]) -> Dict[str, Agent[LinterContext]]:
+    """Create agents with the specified model configuration."""
+    
+    # Specialized agents with per-agent prompts
+    duplication_agent = Agent[LinterContext](
+        name="Duplication Lint Agent",
+        model=models["specialist_model"],
+        handoff_description="Detects duplicated code blocks across the repository.",
+        instructions=_agent_instructions_with_prompt("Use your tools to analyze duplication and return compact JSON.", "duplication"),
+        tools=[check_code_duplication, scan_repo_index, load_rules_text],
+    )
 
-design_agent = Agent[LinterContext](
-    name="Design Lint Agent",
-    model="gpt-5-mini-2025-08-07",
-    handoff_description="Evaluates class cohesion and placement of methods.",
-    instructions=_agent_instructions_with_prompt("Use your tools to check class cohesion and return compact JSON.", "design"),
-    tools=[check_class_cohesion, scan_repo_index, load_rules_text],
-)
+    design_agent = Agent[LinterContext](
+        name="Design Lint Agent",
+        model=models["specialist_model"],
+        handoff_description="Evaluates class cohesion and placement of methods.",
+        instructions=_agent_instructions_with_prompt("Use your tools to check class cohesion and return compact JSON.", "design"),
+        tools=[check_class_cohesion, scan_repo_index, load_rules_text],
+    )
 
-structure_agent = Agent[LinterContext](
-    name="Structure Lint Agent",
-    model="gpt-5-mini-2025-08-07",
-    handoff_description="Assesses file/directory structure.",
-    instructions=_agent_instructions_with_prompt("Use your tools to assess structure and return compact JSON.", "structure"),
-    tools=[check_file_structure, scan_repo_index, load_rules_text],
-)
+    structure_agent = Agent[LinterContext](
+        name="Structure Lint Agent",
+        model=models["specialist_model"],
+        handoff_description="Assesses file/directory structure.",
+        instructions=_agent_instructions_with_prompt("Use your tools to assess structure and return compact JSON.", "structure"),
+        tools=[check_file_structure, scan_repo_index, load_rules_text],
+    )
 
-complexity_agent = Agent[LinterContext](
-    name="Complexity Lint Agent",
-    model="gpt-5-mini-2025-08-07",
-    handoff_description="Flags long files, classes, and functions.",
-    instructions=_agent_instructions_with_prompt("Use your tools to flag long code and return compact JSON.", "complexity"),
-    tools=[check_complexity_lengths, scan_repo_index, load_rules_text],
-)
+    complexity_agent = Agent[LinterContext](
+        name="Complexity Lint Agent",
+        model=models["specialist_model"],
+        handoff_description="Flags long files, classes, and functions.",
+        instructions=_agent_instructions_with_prompt("Use your tools to flag long code and return compact JSON.", "complexity"),
+        tools=[check_complexity_lengths, scan_repo_index, load_rules_text],
+    )
 
-typing_docs_agent = Agent[LinterContext](
-    name="Typing & Docs Lint Agent",
-    model="gpt-5-mini-2025-08-07",
-    handoff_description="Checks Python type hints, docstrings, and comment density.",
-    instructions=_agent_instructions_with_prompt("Use your tools to check typing/docs and return compact JSON.", "typing_docs"),
-    tools=[check_typing_and_docs, scan_repo_index, load_rules_text],
-)
+    typing_docs_agent = Agent[LinterContext](
+        name="Typing & Docs Lint Agent",
+        model=models["specialist_model"],
+        handoff_description="Checks Python type hints, docstrings, and comment density.",
+        instructions=_agent_instructions_with_prompt("Use your tools to check typing/docs and return compact JSON.", "typing_docs"),
+        tools=[check_typing_and_docs, scan_repo_index, load_rules_text],
+    )
 
-error_handling_agent = Agent[LinterContext](
-    name="Error Handling Lint Agent",
-    model="gpt-5-mini-2025-08-07",
-    handoff_description="Checks for proper error handling patterns.",
-    instructions=_agent_instructions_with_prompt("Use your tools to check error handling and return compact JSON.", "error_handling"),
-    tools=[check_error_handling, scan_repo_index, load_rules_text],
-)
+    error_handling_agent = Agent[LinterContext](
+        name="Error Handling Lint Agent",
+        model=models["specialist_model"],
+        handoff_description="Checks for proper error handling patterns.",
+        instructions=_agent_instructions_with_prompt("Use your tools to check error handling and return compact JSON.", "error_handling"),
+        tools=[check_error_handling, scan_repo_index, load_rules_text],
+    )
 
-testing_agent = Agent[LinterContext](
-    name="Testing Lint Agent",
-    model="gpt-5-mini-2025-08-07",
-    handoff_description="Estimates test coverage and testing hygiene.",
-    instructions=_agent_instructions_with_prompt("Use your tools to check tests and return compact JSON.", "testing"),
-    tools=[check_tests, scan_repo_index, load_rules_text],
-)
+    testing_agent = Agent[LinterContext](
+        name="Testing Lint Agent",
+        model=models["specialist_model"],
+        handoff_description="Estimates test coverage and testing hygiene.",
+        instructions=_agent_instructions_with_prompt("Use your tools to check tests and return compact JSON.", "testing"),
+        tools=[check_tests, scan_repo_index, load_rules_text],
+    )
 
-security_agent = Agent[LinterContext](
-    name="Security Lint Agent",
-    model="gpt-5-mini-2025-08-07",
-    handoff_description="Flags common security smell patterns.",
-    instructions=_agent_instructions_with_prompt("Use your tools to check security smells and return compact JSON.", "security"),
-    tools=[check_security_heuristics, scan_repo_index, load_rules_text],
-)
+    security_agent = Agent[LinterContext](
+        name="Security Lint Agent",
+        model=models["specialist_model"],
+        handoff_description="Flags common security smell patterns.",
+        instructions=_agent_instructions_with_prompt("Use your tools to check security smells and return compact JSON.", "security"),
+        tools=[check_security_heuristics, scan_repo_index, load_rules_text],
+    )
 
 
 def _recommendations_instructions(run_context: RunContextWrapper[LinterContext], agent: Agent[LinterContext]) -> str:
@@ -151,13 +163,13 @@ def _recommendations_instructions(run_context: RunContextWrapper[LinterContext],
     )
 
 
-recommendations_agent = Agent[LinterContext](
-    name="Recommendations Agent",
-    model="gpt-5-mini-2025-08-07",
-    handoff_description="Generates actionable code recommendations for selected issues.",
-    instructions=_recommendations_instructions,
-    tools=[read_code_snippet],
-)
+    recommendations_agent = Agent[LinterContext](
+        name="Recommendations Agent",
+        model=models["recommendations_model"],
+        handoff_description="Generates actionable code recommendations for selected issues.",
+        instructions=_recommendations_instructions,
+        tools=[read_code_snippet],
+    )
 
 
 def _triage_instructions(run_context: RunContextWrapper[LinterContext], agent: Agent[LinterContext]) -> str:
@@ -190,34 +202,52 @@ async def _on_linter_handoff(context: RunContextWrapper[LinterContext], input: L
         context.context.rules_text = ((context.context.rules_text or "") + "\n\n" + input.prompt_overrides).strip()
 
 
-linter_triage_agent = Agent[LinterContext](
-    name="Linter Triage Agent",
-    model="gpt-5-2025-08-07",
-    handoff_description="Orchestrates repository linting across specialized agents and returns a consolidated report.",
-    instructions=_triage_instructions,
-    handoffs=[
-        handoff(agent=duplication_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
-        handoff(agent=design_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
-        handoff(agent=structure_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
-        handoff(agent=complexity_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
-        handoff(agent=typing_docs_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
-        handoff(agent=error_handling_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
-        handoff(agent=testing_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
-        handoff(agent=security_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
-    ],
-    tools=[scan_repo_index, load_rules_text],
-)
+    linter_triage_agent = Agent[LinterContext](
+        name="Linter Triage Agent",
+        model=models["triage_model"],
+        handoff_description="Orchestrates repository linting across specialized agents and returns a consolidated report.",
+        instructions=_triage_instructions,
+        handoffs=[
+            handoff(agent=duplication_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
+            handoff(agent=design_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
+            handoff(agent=structure_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
+            handoff(agent=complexity_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
+            handoff(agent=typing_docs_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
+            handoff(agent=error_handling_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
+            handoff(agent=testing_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
+            handoff(agent=security_agent, on_handoff=_on_linter_handoff, input_type=LinterInput),
+        ],
+        tools=[scan_repo_index, load_rules_text],
+    )
+
+    return {
+        "duplication": duplication_agent,
+        "design": design_agent,
+        "structure": structure_agent,
+        "complexity": complexity_agent,
+        "typing_docs": typing_docs_agent,
+        "error_handling": error_handling_agent,
+        "testing": testing_agent,
+        "security": security_agent,
+        "recommendations": recommendations_agent,
+        "triage": linter_triage_agent,
+    }
 
 
-async def run_linter(repo_path: str, rules_path: Optional[str] = None, prompt_overrides: Optional[str] = None) -> LintReport:
+async def run_linter(repo_path: str, rules_path: Optional[str] = None, prompt_overrides: Optional[str] = None, models: Optional[Dict[str, str]] = None) -> LintReport:
     logger = logging.getLogger("linter")
     logger.info("Starting linter run")
     logger.debug("Inputs: repo_path=%s, rules_path=%s, prompt_overrides_len=%s", repo_path, rules_path, (len(prompt_overrides) if prompt_overrides else 0))
+    
+    if models is None:
+        models = _get_model_config()
+    
+    agents = _create_agents(models)
     ctx = create_linter_context(repo_path, rules_path, prompt_overrides)
     seed: List[TResponseInputItem] = [
         {"role": "user", "content": "Perform a full repository lint and return a JSON report with 'summary' and 'issues'."}
     ]
-    result = await Runner.run(linter_triage_agent, seed, context=ctx)
+    result = await Runner.run(agents["triage"], seed, context=ctx)
     txt = _extract_final_output(result)
     try:
         data = json.loads(txt)
@@ -231,24 +261,29 @@ async def run_linter(repo_path: str, rules_path: Optional[str] = None, prompt_ov
         return LintReport(summary={"note": "LLM returned non-JSON output"}, issues=[LintIssue(rule="unparsed_output", path="", message=txt)])
 
 
-async def run_linter_parallel(repo_path: str, rules_path: Optional[str] = None, prompt_overrides: Optional[str] = None) -> LintReport:
+async def run_linter_parallel(repo_path: str, rules_path: Optional[str] = None, prompt_overrides: Optional[str] = None, models: Optional[Dict[str, str]] = None) -> LintReport:
     """Run each specialized lint agent concurrently and aggregate results."""
     logger = logging.getLogger("linter")
     logger.info("Starting parallel linter run")
+    
+    if models is None:
+        models = _get_model_config()
+    
+    agent_dict = _create_agents(models)
     base_ctx = create_linter_context(repo_path, rules_path, prompt_overrides)
     seed: List[TResponseInputItem] = [
         {"role": "user", "content": "Run your tools and return a compact JSON with 'summary' and 'issues'. Keep outputs concise."}
     ]
 
     agents: List[Agent[LinterContext]] = [
-        duplication_agent,
-        design_agent,
-        structure_agent,
-        complexity_agent,
-        typing_docs_agent,
-        error_handling_agent,
-        testing_agent,
-        security_agent,
+        agent_dict["duplication"],
+        agent_dict["design"],
+        agent_dict["structure"],
+        agent_dict["complexity"],
+        agent_dict["typing_docs"],
+        agent_dict["error_handling"],
+        agent_dict["testing"],
+        agent_dict["security"],
     ]
 
     async def _run_one(agent: Agent[LinterContext]):
@@ -315,7 +350,7 @@ async def run_linter_parallel(repo_path: str, rules_path: Optional[str] = None, 
             }
         ]
         try:
-            rec_result = await Runner.run(recommendations_agent, seed, context=base_ctx)
+            rec_result = await Runner.run(agent_dict["recommendations"], seed, context=base_ctx)
             rec_txt = _extract_final_output(rec_result)
             rec_obj = json.loads(rec_txt)
             recs = rec_obj.get("recommendations", []) or []
@@ -385,6 +420,9 @@ def main():
     parser.add_argument("--indent", type=int, default=2, help="JSON indent (when --format=json)")
     parser.add_argument("--out", dest="out_path", default=None, help="Write output to a file (prints to stdout if omitted)")
     parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO", help="Logging level")
+    parser.add_argument("--specialist-model", dest="specialist_model", default=None, help="Model for specialist agents (overrides LLM_LINTER_SPECIALIST_MODEL)")
+    parser.add_argument("--triage-model", dest="triage_model", default=None, help="Model for triage agent (overrides LLM_LINTER_TRIAGE_MODEL)")
+    parser.add_argument("--recommendations-model", dest="recommendations_model", default=None, help="Model for recommendations agent (overrides LLM_LINTER_RECOMMENDATIONS_MODEL)")
     args = parser.parse_args()
 
     # Configure logging
@@ -401,11 +439,16 @@ def main():
         logger.debug("OPENAI_API_KEY present in environment")
     else:
         logger.warning("OPENAI_API_KEY is not set; linter will fail to call models")
+    
+    # Get model configuration from CLI args, env vars, or defaults
+    models = _get_model_config(args.specialist_model, args.triage_model, args.recommendations_model)
+    logger.info("Model configuration: specialist=%s, triage=%s, recommendations=%s", 
+                models["specialist_model"], models["triage_model"], models["recommendations_model"])
 
     if args.mode == "parallel":
-        report = asyncio.run(run_linter_parallel(args.repo_path, args.rules_path, args.prompt_overrides))
+        report = asyncio.run(run_linter_parallel(args.repo_path, args.rules_path, args.prompt_overrides, models))
     else:
-        report = asyncio.run(run_linter(args.repo_path, args.rules_path, args.prompt_overrides))
+        report = asyncio.run(run_linter(args.repo_path, args.rules_path, args.prompt_overrides, models))
 
     # Render output
     if args.format == "json":

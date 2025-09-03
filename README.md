@@ -2,6 +2,24 @@
 
 An intelligent multi-agent linting tool powered by large language models that provides comprehensive code analysis beyond traditional static analysis tools.
 
+## 🚀 Quick Start
+
+```bash
+# Install directly from GitHub
+pip install git+https://github.com/emelas-tomoro/llm-linter.git
+
+# Set your OpenAI API key
+export OPENAI_API_KEY="your-api-key-here"
+
+# Lint any codebase
+llm-linter /path/to/your/project
+```
+
+Or use the one-liner installation script:
+```bash
+curl -sSL https://raw.githubusercontent.com/emelas-tomoro/llm-linter/main/install.sh | bash
+```
+
 ## Overview
 
 LLM Linter uses specialized AI agents to analyze your codebase across multiple dimensions:
@@ -22,27 +40,188 @@ LLM Linter uses specialized AI agents to analyze your codebase across multiple d
 - Python 3.13+
 - OpenAI API key (set as `OPENAI_API_KEY` environment variable)
 
-### Setup
+### Install Directly from Repository (Recommended)
 
-1. Clone or download this repository
-2. Install dependencies:
+Install the latest version directly from GitHub:
+
+```bash
+pip install git+https://github.com/emelas-tomoro/llm-linter.git
+```
+
+This installs the `llm-linter` command globally, so you can use it from anywhere:
+
+```bash
+llm-linter /path/to/any/codebase
+```
+
+### Install Specific Version
+
+Install from a specific release or branch:
+
+```bash
+# Install from a specific tag/release
+pip install git+https://github.com/emelas-tomoro/llm-linter.git@v0.1.0
+
+# Install from a specific branch
+pip install git+https://github.com/emelas-tomoro/llm-linter.git@main
+```
+
+### Install with Pipx (Isolated Environment)
+
+For completely isolated installation that doesn't affect your system Python:
+
+```bash
+pipx install git+https://github.com/emelas-tomoro/llm-linter.git
+```
+
+### Development Installation
+
+For development or local modifications:
+
+1. Clone this repository:
    ```bash
-   uv sync
-   ```
-   or with pip:
-   ```bash
-   pip install openai>=1.99.6 openai-agents>=0.2.5
+   git clone https://github.com/emelas-tomoro/llm-linter.git
+   cd llm-linter
    ```
 
-3. Set your OpenAI API key:
+2. Install in editable mode:
    ```bash
-   export OPENAI_API_KEY="your-api-key-here"
+   pip install -e .
    ```
-   
-   Or create a `.env` file in your project root:
-   ```
-   OPENAI_API_KEY=your-api-key-here
-   ```
+
+### API Key Setup
+
+Set your OpenAI API key:
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+```
+
+Or create a `.env` file in your project root:
+```
+OPENAI_API_KEY=your-api-key-here
+```
+
+### Model Configuration
+
+You can customize which OpenAI models to use via environment variables:
+
+```bash
+# Set models via environment variables
+export LLM_LINTER_SPECIALIST_MODEL="gpt-5-mini-2025-08-07"      # For specialist agents (default)
+export LLM_LINTER_TRIAGE_MODEL="gpt-5-2025-08-07"               # For triage agent (default)
+export LLM_LINTER_RECOMMENDATIONS_MODEL="gpt-5-mini-2025-08-07" # For recommendations (default)
+```
+
+Or add them to your `.env` file:
+```
+OPENAI_API_KEY=your-api-key-here
+LLM_LINTER_SPECIALIST_MODEL=gpt-5-mini-2025-08-07
+LLM_LINTER_TRIAGE_MODEL=gpt-5-2025-08-07
+LLM_LINTER_RECOMMENDATIONS_MODEL=gpt-5-mini-2025-08-07
+```
+
+> 💡 **Tip**: Copy the `env.example` file from the repository to `.env` and customize it with your settings.
+
+**Available Models:**
+- `gpt-5-2025-08-07` - Latest GPT-5 model (default for triage)
+- `gpt-5-mini-2025-08-07` - GPT-5 mini version (default for specialists)
+- `gpt-4o` - GPT-4 Omni, very capable
+- `gpt-4o-mini` - GPT-4 Omni mini, fast and cost-effective
+- `gpt-4-turbo` - Previous generation, still capable
+- `gpt-3.5-turbo` - Fastest and cheapest option
+
+**Model Roles:**
+- **Specialist Model**: Used by all analysis agents (complexity, security, etc.)
+- **Triage Model**: Used by the coordinating agent in triage mode
+- **Recommendations Model**: Used for generating actionable code suggestions
+
+### Model Configuration Priority
+
+Models are selected in the following priority order (highest to lowest):
+
+1. **Command Line Arguments**: `--specialist-model`, `--triage-model`, `--recommendations-model`
+2. **Environment Variables**: `LLM_LINTER_SPECIALIST_MODEL`, `LLM_LINTER_TRIAGE_MODEL`, `LLM_LINTER_RECOMMENDATIONS_MODEL`
+3. **Default Values**: `gpt-5-mini-2025-08-07` (specialists), `gpt-5-2025-08-07` (triage)
+
+This allows for flexible configuration:
+- Set defaults in `.env` files
+- Override per-project via environment variables
+- Override per-run via command line arguments
+
+## Quick Start Examples
+
+### Team/Organization Usage
+
+For teams, you can standardize on a specific version:
+
+```bash
+# Install specific commit
+pip install git+https://github.com/emelas-tomoro/llm-linter.git@abc1234
+
+# Install specific branch (e.g., for testing new features)
+pip install git+https://github.com/emelas-tomoro/llm-linter.git@feature/new-analysis
+
+# Install specific tag/release
+pip install git+https://github.com/emelas-tomoro/llm-linter.git@v0.2.0
+```
+
+### CI/CD Integration
+
+Add to your CI pipeline:
+
+```yaml
+# GitHub Actions example
+- name: Install LLM Linter
+  run: pip install git+https://github.com/emelas-tomoro/llm-linter.git
+
+- name: Run LLM Linter
+  run: llm-linter . --format json --out lint-report.json
+  env:
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+```
+
+### Local Development Workflow
+
+```bash
+# Install once
+pip install git+https://github.com/emelas-tomoro/llm-linter.git
+
+# Use on any project
+cd /path/to/project-a
+llm-linter .
+
+cd /path/to/project-b  
+llm-linter . --format human
+
+# Update when new features are available
+pip install --upgrade git+https://github.com/emelas-tomoro/llm-linter.git
+```
+
+### Model Configuration Examples
+
+**Cost-Optimized Setup** (fastest, cheapest):
+```bash
+export LLM_LINTER_SPECIALIST_MODEL="gpt-3.5-turbo"
+export LLM_LINTER_TRIAGE_MODEL="gpt-4o-mini"
+export LLM_LINTER_RECOMMENDATIONS_MODEL="gpt-3.5-turbo"
+llm-linter /path/to/project
+```
+
+**High-Quality Setup** (best results, higher cost):
+```bash
+export LLM_LINTER_SPECIALIST_MODEL="gpt-4o"
+export LLM_LINTER_TRIAGE_MODEL="gpt-4o"
+export LLM_LINTER_RECOMMENDATIONS_MODEL="gpt-4o"
+llm-linter /path/to/project
+```
+
+**Default Setup** (uses GPT-5 models):
+```bash
+export LLM_LINTER_SPECIALIST_MODEL="gpt-5-mini-2025-08-07"
+export LLM_LINTER_TRIAGE_MODEL="gpt-5-2025-08-07"
+export LLM_LINTER_RECOMMENDATIONS_MODEL="gpt-5-mini-2025-08-07"
+llm-linter /path/to/project
+```
 
 ## Usage
 
@@ -51,13 +230,18 @@ LLM Linter uses specialized AI agents to analyze your codebase across multiple d
 Lint a repository with default settings:
 
 ```bash
+llm-linter /path/to/your/repository
+```
+
+You can also use the module form:
+```bash
 python -m linter /path/to/your/repository
 ```
 
 ### Command Line Options
 
 ```bash
-python -m linter [OPTIONS] REPO_PATH
+llm-linter [OPTIONS] REPO_PATH
 ```
 
 **Arguments:**
@@ -71,32 +255,47 @@ python -m linter [OPTIONS] REPO_PATH
 - `--indent INT` - JSON indent when using json format (default: 2)
 - `--out FILE` - Write output to file instead of stdout
 - `--log-level {DEBUG,INFO,WARNING,ERROR}` - Logging level (default: INFO)
+- `--specialist-model MODEL` - Model for specialist agents (overrides env var)
+- `--triage-model MODEL` - Model for triage agent (overrides env var)  
+- `--recommendations-model MODEL` - Model for recommendations agent (overrides env var)
 
 ### Examples
 
 **Basic linting:**
 ```bash
-python -m linter ./my-project
+llm-linter ./my-project
 ```
 
 **Human-readable output:**
 ```bash
-python -m linter ./my-project --format human
+llm-linter ./my-project --format human
 ```
 
 **With custom rules:**
 ```bash
-python -m linter ./my-project --rules-path ./coding-standards
+llm-linter ./my-project --rules-path ./coding-standards
 ```
 
 **Save results to file:**
 ```bash
-python -m linter ./my-project --out lint-report.json
+llm-linter ./my-project --out lint-report.json
 ```
 
 **Verbose logging:**
 ```bash
-python -m linter ./my-project --log-level DEBUG
+llm-linter ./my-project --log-level DEBUG
+```
+
+**Custom models via CLI:**
+```bash
+# Use cost-effective models
+llm-linter ./my-project --specialist-model gpt-3.5-turbo --triage-model gpt-4o-mini
+
+# Use high-quality models
+llm-linter ./my-project --specialist-model gpt-4o --triage-model gpt-4o --recommendations-model gpt-4o
+
+# Mix and match
+llm-linter ./my-project --specialist-model gpt-4o-mini --triage-model gpt-5-2025-08-07
 ```
 
 ## Execution Modes
@@ -192,10 +391,78 @@ The linter will automatically load environment variables from a `.env` file in t
 - The tool includes built-in limits to prevent excessive API usage
 - Monitor your OpenAI API usage dashboard
 
+## Advanced Installation Options
+
+### Install from GitHub Archive
+
+You can also install from a downloaded archive:
+
+```bash
+# Install from latest archive
+pip install https://github.com/emelas-tomoro/llm-linter/archive/main.tar.gz
+
+# Install from specific release archive
+pip install https://github.com/emelas-tomoro/llm-linter/archive/v0.1.0.tar.gz
+```
+
+### Docker Container
+
+Create a Dockerfile for containerized usage:
+
+```dockerfile
+FROM python:3.13-slim
+
+# Install git (required for pip install git+)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+# Install llm-linter directly from repository
+RUN pip install git+https://github.com/emelas-tomoro/llm-linter.git
+
+# Set up working directory
+WORKDIR /workspace
+
+# Entry point
+ENTRYPOINT ["llm-linter"]
+```
+
+Build and use:
+```bash
+docker build -t llm-linter .
+docker run -v $(pwd):/workspace llm-linter /workspace
+```
+
+### Update Installation
+
+To update to the latest version:
+
+```bash
+pip install --upgrade git+https://github.com/emelas-tomoro/llm-linter.git
+```
+
+### Uninstall
+
+```bash
+pip uninstall llm-linter
+```
+
+## Development Setup
+
+For development, clone and install in editable mode:
+
+```bash
+git clone https://github.com/emelas-tomoro/llm-linter.git
+cd llm-linter
+pip install -e ".[dev]"
+```
+
+This allows you to make changes to the code and test them immediately.
+
 ## Contributing
 
 The linter is built with a modular agent architecture. Each analysis type is handled by a specialized agent with its own prompt and tools. See the `linter/core.py` file for agent definitions and `linter/prompts/` for agent-specific prompts.
 
 ## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 This project uses the OpenAI API and requires an API key. Please ensure you comply with OpenAI's usage policies.
