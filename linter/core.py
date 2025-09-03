@@ -84,6 +84,46 @@ def _extract_final_output(result: Any) -> str:
     return str(result)
 
 
+def _recommendations_instructions(run_context: RunContextWrapper[LinterContext], agent: Agent[LinterContext]) -> str:
+    prompt = _read_prompt("recommendations")
+    return (
+        "You generate concise, actionable recommendations for the provided lint issues.\n"
+        "Return ONLY JSON with 'recommendations': [{path, line_start, rule, text, code_suggestion?}].\n"
+        "Keep each text concise; include code_suggestion only if short and necessary.\n"
+        + prompt
+    )
+
+
+def _triage_instructions(run_context: RunContextWrapper[LinterContext], agent: Agent[LinterContext]) -> str:
+    ctx = run_context.context
+    base = ctx.repo_path
+    return (
+        "You are the Linter Triage Agent. Orchestrate specialized lint agents via handoffs.\n"
+        "1) Load rules if provided. 2) Run each specialized agent as needed. 3) Aggregate their JSON tool outputs into a single structured report.\n"
+        f"Target repository root: {base}\n"
+        "Important: Output a compact JSON object with fields 'summary' and 'issues'. Merge duplicate issues."
+    )
+
+
+async def _on_linter_handoff(context: RunContextWrapper[LinterContext], input: LinterInput) -> None:
+    context.context.repo_path = input.repo_path
+    if input.rules_path:
+        # Preload rules
+        base = Path(input.rules_path)
+        if base.exists():
+            blobs: List[str] = []
+            for ext in (".md", ".txt"):
+                for p in base.rglob(f"*{ext}"):
+                    try:
+                        blobs.append(p.read_text(encoding="utf-8"))
+                    except Exception:
+                        pass
+            rules = "\n\n".join(b for b in blobs if b.strip())
+            context.context.rules_text = rules
+    if input.prompt_overrides:
+        context.context.rules_text = ((context.context.rules_text or "") + "\n\n" + input.prompt_overrides).strip()
+
+
 def _create_agents(models: Dict[str, str]) -> Dict[str, Agent[LinterContext]]:
     """Create agents with the specified model configuration."""
     
@@ -153,16 +193,6 @@ def _create_agents(models: Dict[str, str]) -> Dict[str, Agent[LinterContext]]:
     )
 
 
-def _recommendations_instructions(run_context: RunContextWrapper[LinterContext], agent: Agent[LinterContext]) -> str:
-    prompt = _read_prompt("recommendations")
-    return (
-        "You generate concise, actionable recommendations for the provided lint issues.\n"
-        "Return ONLY JSON with 'recommendations': [{path, line_start, rule, text, code_suggestion?}].\n"
-        "Keep each text concise; include code_suggestion only if short and necessary.\n"
-        + prompt
-    )
-
-
     recommendations_agent = Agent[LinterContext](
         name="Recommendations Agent",
         model=models["recommendations_model"],
@@ -170,37 +200,6 @@ def _recommendations_instructions(run_context: RunContextWrapper[LinterContext],
         instructions=_recommendations_instructions,
         tools=[read_code_snippet],
     )
-
-
-def _triage_instructions(run_context: RunContextWrapper[LinterContext], agent: Agent[LinterContext]) -> str:
-    ctx = run_context.context
-    base = ctx.repo_path
-    return (
-        "You are the Linter Triage Agent. Orchestrate specialized lint agents via handoffs.\n"
-        "1) Load rules if provided. 2) Run each specialized agent as needed. 3) Aggregate their JSON tool outputs into a single structured report.\n"
-        f"Target repository root: {base}\n"
-        "Important: Output a compact JSON object with fields 'summary' and 'issues'. Merge duplicate issues."
-    )
-
-
-async def _on_linter_handoff(context: RunContextWrapper[LinterContext], input: LinterInput) -> None:
-    context.context.repo_path = input.repo_path
-    if input.rules_path:
-        # Preload rules
-        base = Path(input.rules_path)
-        if base.exists():
-            blobs: List[str] = []
-            for ext in (".md", ".txt"):
-                for p in base.rglob(f"*{ext}"):
-                    try:
-                        blobs.append(p.read_text(encoding="utf-8"))
-                    except Exception:
-                        pass
-            rules = "\n\n".join(b for b in blobs if b.strip())
-            context.context.rules_text = rules
-    if input.prompt_overrides:
-        context.context.rules_text = ((context.context.rules_text or "") + "\n\n" + input.prompt_overrides).strip()
-
 
     linter_triage_agent = Agent[LinterContext](
         name="Linter Triage Agent",
