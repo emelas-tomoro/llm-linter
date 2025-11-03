@@ -261,8 +261,14 @@ async def run_linter(repo_path: str, rules_path: Optional[str] = None, prompt_ov
         return LintReport(summary={"note": "LLM returned non-JSON output"}, issues=[LintIssue(rule="unparsed_output", path="", message=txt)])
 
 
-async def run_linter_parallel(repo_path: str, rules_path: Optional[str] = None, prompt_overrides: Optional[str] = None, models: Optional[Dict[str, str]] = None) -> LintReport:
-    """Run each specialized lint agent concurrently and aggregate results."""
+async def run_linter_parallel(
+    repo_path: str,
+    rules_path: Optional[str] = None,
+    prompt_overrides: Optional[str] = None,
+    models: Optional[Dict[str, str]] = None,
+    concurrency: Optional[int] = None,
+) -> LintReport:
+    """Run each specialized lint agent with bounded concurrency and aggregate results."""
     logger = logging.getLogger("linter")
     logger.info("Starting parallel linter run")
     
@@ -286,23 +292,29 @@ async def run_linter_parallel(repo_path: str, rules_path: Optional[str] = None, 
         agent_dict["security"],
     ]
 
+    # Concurrency limiter
+    eff_conc = len(agents) if concurrency in (None, 0) else max(1, min(int(concurrency), len(agents)))
+    logger.info("Parallel run using concurrency=%s (agents=%s)", eff_conc, len(agents))
+    sem = asyncio.Semaphore(eff_conc)
+
     async def _run_one(agent: Agent[LinterContext]):
-        # Give each agent an isolated context copy
-        agent_ctx = base_ctx.model_copy(deep=True)
-        logger.debug("Running agent %s", agent.name)
-        start_time = time.perf_counter()
-        result = await Runner.run(agent, seed, context=agent_ctx)
-        elapsed = time.perf_counter() - start_time
-        txt = _extract_final_output(result)
-        try:
-            data = json.loads(txt)
-            return agent.name, data, elapsed
-        except Exception:
-            logger.warning("Agent %s returned non-JSON output", agent.name)
-            return agent.name, {
-                "summary": {"note": "non_json_output"},
-                "issues": [{"rule": "unparsed_output", "path": "", "message": txt, "severity": "info"}],
-            }, elapsed
+        async with sem:
+            # Give each agent an isolated context copy
+            agent_ctx = base_ctx.model_copy(deep=True)
+            logger.debug("Running agent %s", agent.name)
+            start_time = time.perf_counter()
+            result = await Runner.run(agent, seed, context=agent_ctx)
+            elapsed = time.perf_counter() - start_time
+            txt = _extract_final_output(result)
+            try:
+                data = json.loads(txt)
+                return agent.name, data, elapsed
+            except Exception:
+                logger.warning("Agent %s returned non-JSON output", agent.name)
+                return agent.name, {
+                    "summary": {"note": "non_json_output"},
+                    "issues": [{"rule": "unparsed_output", "path": "", "message": txt, "severity": "info"}],
+                }, elapsed
 
     results = await asyncio.gather(*[_run_one(a) for a in agents], return_exceptions=True)
 
@@ -422,6 +434,7 @@ def main():
     parser.add_argument("--format", choices=["json", "human"], default="json", help="Output format")
     parser.add_argument("--mode", choices=["parallel", "triage"], default="parallel", help="Execution mode")
     parser.add_argument("--indent", type=int, default=2, help="JSON indent (when --format=json)")
+    parser.add_argument("--concurrency", type=int, default=None, help="Max specialist agents to run concurrently in parallel mode (default: all)")
     parser.add_argument("--out", dest="out_path", default=None, help="Write output to a file (prints to stdout if omitted)")
     parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO", help="Logging level")
     parser.add_argument("--specialist-model", dest="specialist_model", default=None, help="Model for specialist agents (overrides LLM_LINTER_SPECIALIST_MODEL)")
@@ -450,7 +463,15 @@ def main():
                 models["specialist_model"], models["triage_model"], models["recommendations_model"])
 
     if args.mode == "parallel":
-        report = asyncio.run(run_linter_parallel(args.repo_path, args.rules_path, args.prompt_overrides, models))
+        # Allow env var fallback if CLI not set
+        conc_env = os.getenv("LLM_LINTER_CONCURRENCY")
+        conc = args.concurrency
+        if conc is None and conc_env:
+            try:
+                conc = int(conc_env)
+            except Exception:
+                conc = None
+        report = asyncio.run(run_linter_parallel(args.repo_path, args.rules_path, args.prompt_overrides, models, concurrency=conc))
     else:
         report = asyncio.run(run_linter(args.repo_path, args.rules_path, args.prompt_overrides, models))
 
@@ -483,4 +504,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
