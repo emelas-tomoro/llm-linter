@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import os
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -289,17 +290,19 @@ async def run_linter_parallel(repo_path: str, rules_path: Optional[str] = None, 
         # Give each agent an isolated context copy
         agent_ctx = base_ctx.model_copy(deep=True)
         logger.debug("Running agent %s", agent.name)
+        start_time = time.perf_counter()
         result = await Runner.run(agent, seed, context=agent_ctx)
+        elapsed = time.perf_counter() - start_time
         txt = _extract_final_output(result)
         try:
             data = json.loads(txt)
-            return agent.name, data
+            return agent.name, data, elapsed
         except Exception:
             logger.warning("Agent %s returned non-JSON output", agent.name)
             return agent.name, {
                 "summary": {"note": "non_json_output"},
                 "issues": [{"rule": "unparsed_output", "path": "", "message": txt, "severity": "info"}],
-            }
+            }, elapsed
 
     results = await asyncio.gather(*[_run_one(a) for a in agents], return_exceptions=True)
 
@@ -310,8 +313,10 @@ async def run_linter_parallel(repo_path: str, rules_path: Optional[str] = None, 
             # Capture exception as an issue
             issues.append(LintIssue(rule="agent_exception", path="", message=str(res), severity="error"))
             continue
-        agent_name, data = res
-        by_agent[agent_name] = data.get("summary", {})
+        agent_name, data, elapsed = res
+        agent_summary = dict(data.get("summary", {}) or {})
+        agent_summary["elapsed_seconds"] = round(elapsed, 3)
+        by_agent[agent_name] = agent_summary
         for i in data.get("issues", []) or []:
             try:
                 issues.append(LintIssue(**i))
@@ -478,5 +483,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
