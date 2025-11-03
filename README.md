@@ -196,6 +196,7 @@ llm-linter [OPTIONS] REPO_PATH
 - `--prompt-overrides TEXT` - Extra guidance to augment rules
 - `--format {json,human}` - Output format (default: json)
 - `--mode {parallel,triage}` - Execution mode (default: parallel)
+- `--concurrency INT` - Max specialist agents to run concurrently in parallel mode (default: all)
 - `--indent INT` - JSON indent when using json format (default: 2)
 - `--out FILE` - Write output to file instead of stdout
 - `--log-level {DEBUG,INFO,WARNING,ERROR}` - Logging level (default: INFO)
@@ -246,6 +247,9 @@ llm-linter ./my-project --specialist-model gpt-4o-mini --triage-model gpt-5-2025
 
 ### Parallel Mode (Default)
 Runs all specialized agents concurrently for faster execution. Each agent analyzes different aspects of your code simultaneously.
+
+- Concurrency control: use `--concurrency N` (or `LLM_LINTER_CONCURRENCY=N`) to cap how many agents run at once. Default is all agents in parallel.
+- Tip: lower concurrency when rate-limited, running on constrained machines, or to reduce bursty API usage.
 
 ### Triage Mode
 Uses a coordinating agent that orchestrates specialized agents sequentially. May provide more coherent analysis but takes longer.
@@ -314,6 +318,9 @@ Formatted text output suitable for terminal viewing:
 ## Environment Variables
 
 The linter will automatically load environment variables from a `.env` file in the target repository root. This is useful for setting API keys on a per-project basis.
+
+- `OPENAI_API_KEY` — API key for model access
+- `LLM_LINTER_CONCURRENCY` — Max specialist agents to run concurrently in parallel mode (same as `--concurrency`)
 
 ## Limitations
 
