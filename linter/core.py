@@ -234,7 +234,14 @@ def _create_agents(models: Dict[str, str]) -> Dict[str, Agent[LinterContext]]:
     }
 
 
-async def run_linter(repo_path: str, rules_path: Optional[str] = None, prompt_overrides: Optional[str] = None, models: Optional[Dict[str, str]] = None) -> LintReport:
+async def run_linter(
+    repo_path: str,
+    rules_path: Optional[str] = None,
+    prompt_overrides: Optional[str] = None,
+    models: Optional[Dict[str, str]] = None,
+    max_issues_per_tool: Optional[int] = None,
+    duplication_max_issues: Optional[int] = None,
+) -> LintReport:
     logger = logging.getLogger("linter")
     logger.info("Starting linter run")
     logger.debug("Inputs: repo_path=%s, rules_path=%s, prompt_overrides_len=%s", repo_path, rules_path, (len(prompt_overrides) if prompt_overrides else 0))
@@ -244,6 +251,11 @@ async def run_linter(repo_path: str, rules_path: Optional[str] = None, prompt_ov
     
     agents = _create_agents(models)
     ctx = create_linter_context(repo_path, rules_path, prompt_overrides)
+    # Apply issue caps to context to avoid tool-level truncation
+    if max_issues_per_tool is not None:
+        setattr(ctx, "max_issues_per_tool", int(max_issues_per_tool))
+    if duplication_max_issues is not None:
+        setattr(ctx, "duplication_max_issues", int(duplication_max_issues))
     seed: List[TResponseInputItem] = [
         {"role": "user", "content": "Perform a full repository lint and return a JSON report with 'summary' and 'issues'."}
     ]
@@ -252,6 +264,16 @@ async def run_linter(repo_path: str, rules_path: Optional[str] = None, prompt_ov
     try:
         data = json.loads(txt)
         summary = data.get("summary", {})
+        # Attach model configuration to summary for traceability
+        try:
+            summary["model_config"] = {
+                "specialist_model": models.get("specialist_model") if isinstance(models, dict) else None,
+                "triage_model": models.get("triage_model") if isinstance(models, dict) else None,
+                "recommendations_model": models.get("recommendations_model") if isinstance(models, dict) else None,
+                "mode": "triage",
+            }
+        except Exception:
+            pass
         issues_raw = data.get("issues", [])
         issues = [LintIssue(**i) if isinstance(i, dict) else LintIssue(rule="ad_hoc", path="", message=str(i)) for i in issues_raw]
         logger.info("Linter completed successfully: %d issues", len(issues))
@@ -267,6 +289,8 @@ async def run_linter_parallel(
     prompt_overrides: Optional[str] = None,
     models: Optional[Dict[str, str]] = None,
     concurrency: Optional[int] = None,
+    max_issues_per_tool: Optional[int] = None,
+    duplication_max_issues: Optional[int] = None,
 ) -> LintReport:
     """Run each specialized lint agent with bounded concurrency and aggregate results."""
     logger = logging.getLogger("linter")
@@ -277,6 +301,10 @@ async def run_linter_parallel(
     
     agent_dict = _create_agents(models)
     base_ctx = create_linter_context(repo_path, rules_path, prompt_overrides)
+    if max_issues_per_tool is not None:
+        setattr(base_ctx, "max_issues_per_tool", int(max_issues_per_tool))
+    if duplication_max_issues is not None:
+        setattr(base_ctx, "duplication_max_issues", int(duplication_max_issues))
     seed: List[TResponseInputItem] = [
         {"role": "user", "content": "Run your tools and return a compact JSON with 'summary' and 'issues'. Keep outputs concise."}
     ]
@@ -339,6 +367,16 @@ async def run_linter_parallel(
         "by_agent": by_agent,
         "total_issues": len(issues),
     }
+    # Attach model configuration used in this run
+    try:
+        summary["model_config"] = {
+            "specialist_model": models.get("specialist_model") if isinstance(models, dict) else None,
+            "triage_model": models.get("triage_model") if isinstance(models, dict) else None,
+            "recommendations_model": models.get("recommendations_model") if isinstance(models, dict) else None,
+            "mode": "parallel",
+        }
+    except Exception:
+        pass
     logger.info("Parallel linter completed: %d issues across %d agents", len(issues), len(agents))
 
     # Optional recommendations pass: take a small subset of issues (e.g., top 100 by severity) and enrich
@@ -435,6 +473,8 @@ def main():
     parser.add_argument("--mode", choices=["parallel", "triage"], default="parallel", help="Execution mode")
     parser.add_argument("--indent", type=int, default=2, help="JSON indent (when --format=json)")
     parser.add_argument("--concurrency", type=int, default=None, help="Max specialist agents to run concurrently in parallel mode (default: all)")
+    parser.add_argument("--max-issues-per-tool", dest="max_issues_per_tool", type=int, default=None, help="Cap of issues returned per tool before truncation (set higher to reduce truncation)")
+    parser.add_argument("--duplication-max-issues", dest="duplication_max_issues", type=int, default=None, help="Cap of duplication issues before truncation (set higher to reduce truncation)")
     parser.add_argument("--out", dest="out_path", default=None, help="Write output to a file (prints to stdout if omitted)")
     parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO", help="Logging level")
     parser.add_argument("--specialist-model", dest="specialist_model", default=None, help="Model for specialist agents (overrides LLM_LINTER_SPECIALIST_MODEL)")
@@ -471,9 +511,33 @@ def main():
                 conc = int(conc_env)
             except Exception:
                 conc = None
-        report = asyncio.run(run_linter_parallel(args.repo_path, args.rules_path, args.prompt_overrides, models, concurrency=conc))
+        # Load issue caps from env if not provided
+        max_issues_env = os.getenv("LLM_LINTER_MAX_ISSUES_PER_TOOL")
+        dup_max_env = os.getenv("LLM_LINTER_DUPLICATION_MAX_ISSUES")
+        max_issues = args.max_issues_per_tool if args.max_issues_per_tool is not None else (int(max_issues_env) if max_issues_env and max_issues_env.isdigit() else None)
+        dup_max = args.duplication_max_issues if args.duplication_max_issues is not None else (int(dup_max_env) if dup_max_env and dup_max_env.isdigit() else None)
+        report = asyncio.run(run_linter_parallel(
+            args.repo_path,
+            args.rules_path,
+            args.prompt_overrides,
+            models,
+            concurrency=conc,
+            max_issues_per_tool=max_issues,
+            duplication_max_issues=dup_max,
+        ))
     else:
-        report = asyncio.run(run_linter(args.repo_path, args.rules_path, args.prompt_overrides, models))
+        max_issues_env = os.getenv("LLM_LINTER_MAX_ISSUES_PER_TOOL")
+        dup_max_env = os.getenv("LLM_LINTER_DUPLICATION_MAX_ISSUES")
+        max_issues = args.max_issues_per_tool if args.max_issues_per_tool is not None else (int(max_issues_env) if max_issues_env and max_issues_env.isdigit() else None)
+        dup_max = args.duplication_max_issues if args.duplication_max_issues is not None else (int(dup_max_env) if dup_max_env and dup_max_env.isdigit() else None)
+        report = asyncio.run(run_linter(
+            args.repo_path,
+            args.rules_path,
+            args.prompt_overrides,
+            models,
+            max_issues_per_tool=max_issues,
+            duplication_max_issues=dup_max,
+        ))
 
     # Render output
     if args.format == "json":

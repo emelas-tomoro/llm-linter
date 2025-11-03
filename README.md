@@ -197,6 +197,8 @@ llm-linter [OPTIONS] REPO_PATH
 - `--format {json,human}` - Output format (default: json)
 - `--mode {parallel,triage}` - Execution mode (default: parallel)
 - `--concurrency INT` - Max specialist agents to run concurrently in parallel mode (default: all)
+- `--max-issues-per-tool INT` - Cap of issues returned per tool before truncation (raise to avoid truncation)
+- `--duplication-max-issues INT` - Cap of duplication issues before truncation (raise to avoid truncation)
 - `--indent INT` - JSON indent when using json format (default: 2)
 - `--out FILE` - Write output to file instead of stdout
 - `--log-level {DEBUG,INFO,WARNING,ERROR}` - Logging level (default: INFO)
@@ -250,6 +252,7 @@ Runs all specialized agents concurrently for faster execution. Each agent analyz
 
 - Concurrency control: use `--concurrency N` (or `LLM_LINTER_CONCURRENCY=N`) to cap how many agents run at once. Default is all agents in parallel.
 - Tip: lower concurrency when rate-limited, running on constrained machines, or to reduce bursty API usage.
+- Truncation control: raise `--max-issues-per-tool` (and `--duplication-max-issues`) to avoid tool-level truncation flags in summaries.
 
 ### Triage Mode
 Uses a coordinating agent that orchestrates specialized agents sequentially. May provide more coherent analysis but takes longer.
@@ -279,7 +282,13 @@ Structured output with summary statistics and detailed issues:
       "Security Lint Agent": {...}
     },
     "total_issues": 42,
-    "recommendations": 15
+    "recommendations": 15,
+    "model_config": {
+      "specialist_model": "gpt-5-mini-2025-08-07",
+      "triage_model": "gpt-5-2025-08-07",
+      "recommendations_model": "gpt-5-mini-2025-08-07",
+      "mode": "parallel"
+    }
   },
   "issues": [
     {
@@ -303,6 +312,7 @@ Formatted text output suitable for terminal viewing:
 === Lint Summary ===
 - total_issues: 42
 - recommendations: 15
+- model_config: {'specialist_model': 'gpt-5-mini-2025-08-07', 'triage_model': 'gpt-5-2025-08-07', 'recommendations_model': 'gpt-5-mini-2025-08-07', 'mode': 'parallel'}
 
 === Issues ===
 1. [warning] function_too_long - src/main.py (15-85)
@@ -321,6 +331,8 @@ The linter will automatically load environment variables from a `.env` file in t
 
 - `OPENAI_API_KEY` — API key for model access
 - `LLM_LINTER_CONCURRENCY` — Max specialist agents to run concurrently in parallel mode (same as `--concurrency`)
+- `LLM_LINTER_MAX_ISSUES_PER_TOOL` — Default cap per tool (same as `--max-issues-per-tool`)
+- `LLM_LINTER_DUPLICATION_MAX_ISSUES` — Duplication cap (same as `--duplication-max-issues`)
 
 ## Limitations
 
